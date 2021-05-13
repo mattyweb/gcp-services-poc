@@ -18,6 +18,8 @@ and [deploy-cloudrun](https://github.com/google-github-actions/deploy-cloudrun)
 * Added GCP_PROJECT_ID, GCP_SERVICE, GCP_REGION, and GCP_SA_KEY as secrets
 * Changed service port from 8080 (default) to 8000
 * Enabled public access by granting the allUsers member the Cloud Run Invoker role
+* Added Speech to Text library
+* Enabled Speech to Text API in project
 
 ## Pending Steps
 
