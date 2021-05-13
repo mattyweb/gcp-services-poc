@@ -1,9 +1,13 @@
 from typing import List
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile
+from pydantic import BaseModel, BaseSettings
 from google.cloud import storage
+
+
+class Settings(BaseSettings):
+    BUCKET_NAME: str = "Awesome Bucket"
 
 
 class Blob(BaseModel):
@@ -16,11 +20,10 @@ class Blob(BaseModel):
     updated_time: datetime
 
 
-storage_client = storage.Client()
-# https://console.cloud.google.com/storage/browser/[bucket-id]/
-bucket = storage_client.get_bucket('matt-webster-net-gcp-services-poc-bucket')
-
 app = FastAPI()
+settings = Settings()
+storage_client = storage.Client()
+bucket = storage_client.get_bucket(settings.BUCKET_NAME)
 
 
 @app.get("/list/", response_model=List[Blob])
