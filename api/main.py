@@ -3,7 +3,7 @@ from datetime import datetime
 import wave
 import io
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel, BaseSettings
 from google.cloud import storage
 from google.cloud import speech
@@ -76,15 +76,21 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
     # detect audio info from file
     byte_stream = io.BytesIO(blob.download_as_string())
     reader = wave.open(byte_stream, 'rb')
-    audio_info = reader.getparams()
+    params = reader.getparams()
+    audio_info = params._asdict()
+    audio_info['duration'] = audio_info['nframes'] / float(audio_info['framerate'] * audio_info['nchannels'])
+    audio_info['bytes'] = blob.size
+    audio_info['file_name'] = blob.name
+    audio_info['date'] = blob.updated
     print(audio_info)
     reader.close()
+
 
     # configure speech client
     config = speech.RecognitionConfig(
         encoding="LINEAR16",
-        sample_rate_hertz=audio_info.framerate,
-        audio_channel_count=audio_info.nchannels,
+        sample_rate_hertz=audio_info['framerate'],
+        audio_channel_count=audio_info['nchannels'],
         language_code="en-US",
         profanity_filter=True,
         enable_word_time_offsets=True,
@@ -95,23 +101,50 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
         uri=f"gs://{settings.BUCKET_NAME}/{blob.name}"
     )
 
+    try:
     # do async long-running recognize operation
-    operation = await speech_client.long_running_recognize(config=config, audio=audio)
-    response = await operation.result(timeout=90)
+        operation = await speech_client.long_running_recognize(config=config, audio=audio)
+        response = await operation.result(timeout=90)
 
-    transcript = ""
+        transcript = ""
+        blocks = []
+        # generate transcript from reponse blocks and print info
+        for result in response.results:
+            # The first alternative is the most likely one for this portion.
+            # print(u"Transcript: {}".format(result.alternatives[0].transcript))
+            # print("Confidence: {}".format(result.alternatives[0].confidence))
 
-    # generate transcript from reponse blocks and print info
-    for result in response.results:
-        # The first alternative is the most likely one for this portion.
-        print(u"Transcript: {}".format(result.alternatives[0].transcript))
-        print("Confidence: {}".format(result.alternatives[0].confidence))
+            words = []
+            # Go through the words and get their times
+            for i in result.alternatives[0].words:
+                words.append(
+                    {
+                        "word": i.word,
+                        "start": i.start_time.total_seconds(),
+                        "end": i.end_time.total_seconds()
+                    }
+                )
+                # print(f"Words: {i.word} at {i.start_time.total_seconds()}")
 
-        # Go through the words and get their times
-        for i in result.alternatives[0].words:
-            print(f"Words: {i.word} at {i.start_time.total_seconds()}")
+            blocks.append(
+                {
+                    # "speaker": result.alternatives[0].speaker_tag,
+                    "transcript": result.alternatives[0].transcript,
+                    "confidence": result.alternatives[0].confidence,
+                    "words": words
+                }
+            )
+            # Append to transcript string
+            transcript += result.alternatives[0].transcript
 
-        # Append to transcript string
-        transcript += result.alternatives[0].transcript
+        return {
+            "audio_info": audio_info,
+            "transcript_full": transcript,
+            "transcript_details": blocks
+        }
 
-    return transcript
+    except Exception as error:
+        if hasattr(error, "message"):
+            raise HTTPException(status_code=400, detail=error.message)
+        else:
+            raise HTTPException(status_code=400, detail="Error transcribing audio")
