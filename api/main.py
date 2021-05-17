@@ -4,6 +4,7 @@ import wave
 import io
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, BaseSettings
 from google.cloud import storage
 from google.cloud import speech
@@ -23,6 +24,7 @@ class Blob(BaseModel):
 
 
 app = FastAPI()
+app.add_middleware(GZipMiddleware)
 settings = Settings()
 speech_client = speech.SpeechAsyncClient()
 storage_client = storage.Client()
@@ -82,7 +84,6 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
     audio_info['bytes'] = blob.size
     audio_info['file_name'] = blob.name
     audio_info['date'] = blob.updated
-    print(audio_info)
     reader.close()
 
 
@@ -144,6 +145,7 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
         }
 
     except Exception as error:
+        print(error)
         if hasattr(error, "message"):
             raise HTTPException(status_code=400, detail=error.message)
         else:
