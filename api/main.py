@@ -139,8 +139,10 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
             transcript += result.alternatives[0].transcript
 
         return {
+            "id": blob.id,
+            "public_url": blob.public_url,
             "audio_info": audio_info,
-            "transcript_full": transcript,
+            # "transcript_full": transcript,
             "transcript_details": blocks
         }
 
