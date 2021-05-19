@@ -1,5 +1,6 @@
 from typing import List
 from datetime import datetime
+from enum import Enum
 import wave
 import io
 
@@ -21,6 +22,13 @@ class Blob(BaseModel):
     media_link: str
     public_url: str
     updated_time: datetime
+
+
+class SpeechModel(str, Enum):
+    """The type of glass used for the cocktail."""
+
+    DEFAULT = "default"
+    VIDEO = "video"
 
 
 app = FastAPI()
@@ -69,7 +77,7 @@ async def create_upload_file(file: UploadFile = File(...)):
 
 
 @app.post("/transcribe/")
-async def transcribe_uploaded_file(file: UploadFile = File(...)):
+async def transcribe_uploaded_file(model: SpeechModel = SpeechModel.DEFAULT, file: UploadFile = File(...)):
     """Uploads a WAV file to Cloud Storage and returns a transcript."""
     # upload blob
     blob = bucket.blob(file.filename)
@@ -95,6 +103,7 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
         language_code="en-US",
         profanity_filter=True,
         enable_word_time_offsets=True,
+        model=model,
     )
 
     # give it blob pointer
@@ -130,7 +139,7 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
             blocks.append(
                 {
                     # "speaker": result.alternatives[0].speaker_tag,
-                    "transcript": result.alternatives[0].transcript,
+                    "text": result.alternatives[0].transcript,
                     "confidence": result.alternatives[0].confidence,
                     "words": words
                 }
@@ -143,7 +152,11 @@ async def transcribe_uploaded_file(file: UploadFile = File(...)):
             "public_url": blob.public_url,
             "audio_info": audio_info,
             # "transcript_full": transcript,
-            "transcript_details": blocks
+            "transcription": {
+                "vendor": "google",
+                "model": model,
+                "blocks": blocks,
+            }
         }
 
     except Exception as error:
